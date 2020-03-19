@@ -303,7 +303,7 @@ class core_tag_collection {
     public static function change_sortorder($tagcoll, $direction) {
         global $DB;
         if ($direction != -1 && $direction != 1) {
-            throw coding_exception('Second argument in tag_coll_change_sortorder() can be only 1 or -1');
+            throw new coding_exception('Second argument in tag_coll_change_sortorder() can be only 1 or -1');
         }
         $tagcolls = self::get_collections();
         $keys = array_keys($tagcolls);
@@ -408,7 +408,7 @@ class core_tag_collection {
         $tagsort = self::$cloudsortfield ?: 'name';
 
         if (is_numeric($a->$tagsort)) {
-            return ($a->$tagsort == $b->$tagsort) ? 0 : ($a->$tagsort > $b->$tagsort) ? 1 : -1;
+            return (($a->$tagsort == $b->$tagsort) ? 0 : ($a->$tagsort > $b->$tagsort)) ? 1 : -1;
         } else if (is_string($a->$tagsort)) {
             return strcmp($a->$tagsort, $b->$tagsort);
         } else {

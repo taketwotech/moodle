@@ -58,7 +58,7 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
      */
     public function get_widget($userid, $grade, $readonly) {
         $attempt = -1;
-        if ($grade && $grade->attemptnumber) {
+        if ($grade && isset($grade->attemptnumber)) {
             $attempt = $grade->attemptnumber;
         } else {
             $grade = $this->assignment->get_user_grade($userid, true);
@@ -134,20 +134,14 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
            $filename = $feedbackfile->get_filename();
         }
 
-        // Retrieve total number of pages.
-        $pagetotal = document_services::page_number_for_attempt($this->assignment->get_instance()->id,
-                $userid,
-                $attempt,
-                $readonly);
-
         $widget = new assignfeedback_editpdf_widget($this->assignment->get_instance()->id,
                                                     $userid,
                                                     $attempt,
                                                     $url,
                                                     $filename,
                                                     $stampfiles,
-                                                    $readonly,
-                                                    $pagetotal);
+                                                    $readonly
+                                                );
         return $widget;
     }
 
@@ -169,6 +163,14 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
         }
 
         $renderer = $PAGE->get_renderer('assignfeedback_editpdf');
+
+        // Links to download the generated pdf...
+        if ($attempt > -1 && page_editor::has_annotations_or_comments($grade->id, false)) {
+            $html = $this->assignment->render_area_files('assignfeedback_editpdf',
+                                                         document_services::FINAL_PDF_FILEAREA,
+                                                         $grade->id);
+            $mform->addElement('static', 'editpdf_files', get_string('downloadfeedback', 'assignfeedback_editpdf'), $html);
+        }
 
         $widget = $this->get_widget($userid, $grade, false);
 
@@ -338,12 +340,11 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
     }
 
     /**
-     * Automatically enable or disable editpdf feedback plugin based on
-     * whether the ghostscript path is set correctly.
+     * Determine if ghostscript is available and working.
      *
      * @return bool
      */
-    public function is_enabled() {
+    public function is_available() {
         if ($this->enabledcache === null) {
             $testpath = assignfeedback_editpdf\pdf::test_gs_path(false);
             $this->enabledcache = ($testpath->status == assignfeedback_editpdf\pdf::GSPATH_OK);
@@ -351,12 +352,12 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
         return $this->enabledcache;
     }
     /**
-     * Automatically hide the setting for the editpdf feedback plugin.
+     * Prevent enabling this plugin if ghostscript is not available.
      *
      * @return bool false
      */
     public function is_configurable() {
-        return false;
+        return $this->is_available();
     }
 
     /**
@@ -374,5 +375,15 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
      */
     public function supports_review_panel() {
         return true;
+    }
+
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of settings
+     * @since Moodle 3.2
+     */
+    public function get_config_for_external() {
+        return (array) $this->get_config();
     }
 }

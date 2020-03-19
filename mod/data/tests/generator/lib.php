@@ -29,8 +29,6 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Data generator class for mod_data.
  *
- * Currently, the field types in the ignoredfieldtypes array aren't supported.
- *
  * @package    mod_data
  * @category   test
  * @copyright  2012 Petr Skoda {@link http://skodak.org}
@@ -47,12 +45,6 @@ class mod_data_generator extends testing_module_generator {
      * @var int keep track of how many database records have been created.
      */
     protected $databaserecordcount = 0;
-
-    /**
-     * @var The field types which not handled by the generator as of now.
-     */
-    protected $ignoredfieldtypes = array('latlong', 'file', 'picture');
-
 
     /**
      * To be called from data reset code only,
@@ -89,7 +81,6 @@ class mod_data_generator extends testing_module_generator {
 
     /**
      * Creates a field for a mod_data instance.
-     * Currently, the field types in the ignoredfieldtypes array aren't supported.
      *
      * @param StdClass $record
      * @param mod_data $data
@@ -97,12 +88,6 @@ class mod_data_generator extends testing_module_generator {
      */
     public function create_field(stdClass $record = null, $data = null) {
         $record = (array) $record;
-
-        if (in_array($record['type'], $this->ignoredfieldtypes)) {
-            throw new coding_exception('$record\'s type value must not be same as values in ignoredfieldtypes
-                    in phpunit_util::create_field()');
-            return false;
-        }
 
         $this->databasefieldcount++;
 
@@ -133,10 +118,18 @@ class mod_data_generator extends testing_module_generator {
         }
 
         if (!isset($record['param1'])) {
-            if (in_array($record['type'], array('checkbox', 'menu', 'multimenu', 'radiobutton'))) {
-                $record['param1'] = implode("\n", array('one', 'two', 'three', 'four'));
+            if ($record['type'] == 'checkbox') {
+                $record['param1'] = implode("\n", array('opt1', 'opt2', 'opt3', 'opt4'));
+            } else if ($record['type'] == 'radiobutton') {
+                $record['param1'] = implode("\n", array('radioopt1', 'radioopt2', 'radioopt3', 'radioopt4'));
+            } else if ($record['type'] == 'menu') {
+                $record['param1'] = implode("\n", array('menu1', 'menu2', 'menu3', 'menu4'));
+            } else if ($record['type'] == 'multimenu') {
+                $record['param1'] = implode("\n", array('multimenu1', 'multimenu2', 'multimenu3', 'multimenu4'));
             } else if (($record['type'] === 'text') || ($record['type'] === 'url')) {
                 $record['param1'] = 1;
+            } else if ($record['type'] == 'latlong') {
+                $record['param1'] = 'Google Maps';
             } else {
                 $record['param1'] = '';
             }
@@ -146,6 +139,8 @@ class mod_data_generator extends testing_module_generator {
 
             if ($record['type'] === 'textarea') {
                 $record['param2'] = 60;
+            } else if ($record['type'] == 'latlong') {
+                $record['param2'] = -1;
             } else {
                 $record['param2'] = '';
             }
@@ -155,6 +150,8 @@ class mod_data_generator extends testing_module_generator {
 
             if (($record['type'] === 'textarea')) {
                 $record['param3'] = 35;
+            } else if ($record['type'] == 'picture' || $record['type'] == 'file') {
+                $record['param3'] = 0;
             } else {
                 $record['param3'] = '';
             }
@@ -185,7 +182,8 @@ class mod_data_generator extends testing_module_generator {
 
     /**
      * Creates a field for a mod_data instance.
-     * Currently, the field types in the ignoredfieldtypes array aren't supported.
+     * Keep in mind the default data field params created in create_field() function!
+     * ...if you haven't provided your own custom data field parameters there.
      * The developers using the generator must adhere to the following format :
      *
      *   Syntax : $contents[ fieldid ] = fieldvalue
@@ -198,27 +196,35 @@ class mod_data_generator extends testing_module_generator {
      *   $contents['text'] = 'text'
      *   $contents['textarea'] = 'text'
      *   $contents['url'] = 'example.url' or array('example.url', 'urlname')
+     *   $contents['latlong'] = array('value for lattitude', 'value for longitude')
+     *   $contents['file'] = 'filename or draftitemid'
+     *   $contents['picture'] = array('filename or draftitemid', 'alternative text')
      *
-     * @param mod_data $data
+     * @param stdClass $data record from table {data}
      * @param array $contents
-     * @return data_field_{type}
+     * @param int $groupid
+     * @param array $tags
+     * @param array $options
+     * @return int id of the generated record in table {data_records}
      */
-    public function create_entry($data, array $contents) {
-        global $DB;
+    public function create_entry($data, array $contents, $groupid = 0, $tags = [], array $options = null) {
+        global $DB, $USER, $CFG;
 
         $this->databaserecordcount++;
 
-        $recordid = data_add_record($data);
+        $recordid = data_add_record($data, $groupid);
+
+        if (isset($options['approved'])) {
+            data_approve_entry($recordid, !empty($options['approved']));
+        } else {
+            $approved = null;
+        }
 
         $fields = $DB->get_records('data_fields', array('dataid' => $data->id));
 
         // Validating whether required field are filled.
         foreach ($fields as $field) {
             $fieldhascontent = true;
-
-            if (in_array($field->type, $this->ignoredfieldtypes)) {
-                continue;
-            }
 
             $field = data_get_field($field, $data);
 
@@ -254,11 +260,11 @@ class mod_data_generator extends testing_module_generator {
 
                 $contents[$fieldid] = $values;
 
-                foreach ($values as $fieldname => $value) {
-                    if (!$field->notemptyfield($value, $fieldname)) {
-                        $fieldhascontent = false;
-                    }
+                $fieldname = 'field_' . $fieldid;
+                if (!$field->notemptyfield($values[$fieldname], $fieldname)) {
+                    $fieldhascontent = false;
                 }
+
             } else if ($field->type === 'url') {
                 $values = array();
 
@@ -271,12 +277,57 @@ class mod_data_generator extends testing_module_generator {
                 }
 
                 $contents[$fieldid] = $values;
-
-                foreach ($values as $fieldname => $value) {
-                    if (!$field->notemptyfield($value, $fieldname)) {
-                        $fieldhascontent = false;
-                    }
+                $fieldname = 'field_' . $fieldid . '_0';
+                if (!$field->notemptyfield($values[$fieldname], $fieldname)) {
+                    $fieldhascontent = false;
                 }
+
+            } else if ($field->type === 'latlong') {
+                $values = array();
+
+                foreach ($contents[$fieldid] as $key => $value) {
+                    $values['field_' . $fieldid . '_' . $key] = $value;
+                }
+
+                $contents[$fieldid] = $values;
+                $fieldname = 'field_' . $fieldid . '_0';
+                if (!$field->notemptyfield($values[$fieldname], $fieldname)) {
+                    $fieldhascontent = false;
+                }
+
+            } else if ($field->type === 'file' || $field->type === 'picture') {
+                if (is_array($contents[$fieldid])) {
+                    list($itemid, $alttext) = $contents[$fieldid];
+                } else {
+                    $itemid = $contents[$fieldid];
+                    $alttext = '';
+                }
+
+                if (strlen($itemid) && !is_numeric($itemid)) {
+                    // We expect draftarea item id here but it can also be a filename, in this case provider will generate file.
+                    $filename = $itemid;
+                    $usercontext = context_user::instance($USER->id);
+                    $itemid = file_get_unused_draft_itemid();
+                    get_file_storage()->create_file_from_string(['component' => 'user', 'filearea' => 'draft',
+                        'contextid' => $usercontext->id, 'itemid' => $itemid, 'filepath' => '/',
+                        'filename' => $filename],
+                        file_get_contents($CFG->dirroot.'/mod/data/pix/icon.png'));
+                }
+
+                $fieldname = 'field_' . $fieldid . '_file';
+                if ($field->type === 'file') {
+                    $contents[$fieldid] = $itemid;
+                } else {
+                    $contents[$fieldid] = [
+                        $fieldname => $itemid,
+                        'field_' . $fieldid . '_alttext' => $alttext
+                    ];
+                }
+
+                if (!$field->notemptyfield($itemid, $fieldname)) {
+                    $fieldhascontent = false;
+                }
+
             } else {
                 if ($field->notemptyfield($contents[$fieldid], 'field_' . $fieldid . '_0')) {
                     continue;
@@ -291,7 +342,7 @@ class mod_data_generator extends testing_module_generator {
         foreach ($contents as $fieldid => $content) {
             $field = data_get_field_from_id($fieldid, $data);
 
-            if (is_array($content)) {
+            if (is_array($content) and in_array($field->type, array('date', 'textarea', 'url', 'picture', 'latlong'))) {
 
                 foreach ($content as $fieldname => $value) {
                     $field->update_content($recordid, $value, $fieldname);
@@ -300,6 +351,12 @@ class mod_data_generator extends testing_module_generator {
             } else {
                 $field->update_content($recordid, $content);
             }
+        }
+
+        if (!empty($tags)) {
+            $cm = get_coursemodule_from_instance('data', $data->id);
+            core_tag_tag::set_item_tags('mod_data', 'data_records', $recordid,
+                context_module::instance($cm->id), $tags);
         }
 
         return $recordid;

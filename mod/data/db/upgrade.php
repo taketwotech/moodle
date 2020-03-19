@@ -24,62 +24,33 @@ defined('MOODLE_INTERNAL') || die();
 function xmldb_data_upgrade($oldversion) {
     global $CFG, $DB;
 
-    $dbman = $DB->get_manager();
-
-    // Moodle v2.8.0 release upgrade line.
+    // Automatically generated Moodle v3.5.0 release upgrade line.
     // Put any upgrade step following this.
 
-    if ($oldversion < 2015030900) {
-        // Define field required to be added to data_fields.
-        $table = new xmldb_table('data_fields');
-        $field = new xmldb_field('required', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'description');
-
-        // Conditionally launch add field required.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-
-        upgrade_mod_savepoint(true, 2015030900, 'data');
-    }
-
-    // Moodle v2.9.0 release upgrade line.
+    // Automatically generated Moodle v3.6.0 release upgrade line.
     // Put any upgrade step following this.
 
-    if ($oldversion < 2015092200) {
+    // Automatically generated Moodle v3.7.0 release upgrade line.
+    // Put any upgrade step following this.
 
-        // Define field manageapproved to be added to data.
-        $table = new xmldb_table('data');
-        $field = new xmldb_field('manageapproved', XMLDB_TYPE_INTEGER, '4', null, XMLDB_NOTNULL, null, '1', 'approval');
+    if ($oldversion < 2019052001) {
 
-        // Conditionally launch add field manageapproved.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
+        $columns = $DB->get_columns('data');
+
+        $oldclass = "mod-data-default-template ##approvalstatus##";
+        $newclass = "mod-data-default-template ##approvalstatusclass##";
+
+        // Update existing classes.
+        $DB->replace_all_text('data', $columns['singletemplate'], $oldclass, $newclass);
+        $DB->replace_all_text('data', $columns['listtemplate'], $oldclass, $newclass);
+        $DB->replace_all_text('data', $columns['addtemplate'], $oldclass, $newclass);
+        $DB->replace_all_text('data', $columns['rsstemplate'], $oldclass, $newclass);
+        $DB->replace_all_text('data', $columns['asearchtemplate'], $oldclass, $newclass);
 
         // Data savepoint reached.
-        upgrade_mod_savepoint(true, 2015092200, 'data');
+        upgrade_mod_savepoint(true, 2019052001, 'data');
     }
-
-    // Moodle v3.0.0 release upgrade line.
-    // Put any upgrade step following this.
-
-    if ($oldversion < 2016030300) {
-
-        // Define field timemodified to be added to data.
-        $table = new xmldb_table('data');
-        $field = new xmldb_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'notification');
-
-        // Conditionally launch add field timemodified.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-
-        // Data savepoint reached.
-        upgrade_mod_savepoint(true, 2016030300, 'data');
-    }
-
-
-    // Moodle v3.1.0 release upgrade line.
+    // Automatically generated Moodle v3.8.0 release upgrade line.
     // Put any upgrade step following this.
 
     return true;

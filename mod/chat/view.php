@@ -119,7 +119,10 @@ if (has_capability('mod/chat:chat', $context)) {
     $span = $chat->chattime - $now;
     if ($chat->chattime and $chat->schedule and ($span > 0)) {  // A chat is scheduled.
         echo '<p>';
-        echo get_string('sessionstart', 'chat', format_time($span));
+        $chatinfo = new stdClass();
+        $chatinfo->date = userdate($chat->chattime);
+        $chatinfo->fromnow = format_time($span);
+        echo get_string('sessionstart', 'chat', $chatinfo);
         echo '</p>';
     }
 
@@ -142,7 +145,7 @@ if (has_capability('mod/chat:chat', $context)) {
     echo '</p>';
 
     if ($chat->studentlogs or has_capability('mod/chat:readlog', $context)) {
-        if ($msg = $DB->get_records_select('chat_messages', "chatid = ? $groupselect", array($chat->id))) {
+        if ($msg = chat_get_session_messages($chat->id, $currentgroup)) {
             echo '<p>';
             echo html_writer::link(new moodle_url('/mod/chat/report.php', array('id' => $cm->id)),
                                    get_string('viewreport', 'chat'));

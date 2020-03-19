@@ -44,19 +44,37 @@ class behat_context_helper {
      */
     protected static $environment = null;
 
-
     /**
      * @var Escaper::escapeLiteral
      */
     protected static $escaper;
 
     /**
+     * @var array keep track of nonexisting contexts, to avoid exception tracking.
+     */
+    protected static $nonexistingcontexts = array();
+
+    /**
      * Sets the browser session.
      *
      * @param Environment $environment
      * @return void
+     * @deprecated since 3.2 MDL-55072 - please use behat_context_helper::set_environment()
+     * @todo MDL-55365 This will be deleted in Moodle 3.6.
      */
     public static function set_session(Environment $environment) {
+        debugging('set_session is deprecated. Please use set_environment instead.', DEBUG_DEVELOPER);
+
+        self::set_environment($environment);
+    }
+
+    /**
+     * Sets behat environment.
+     *
+     * @param Environment $environment
+     * @return void
+     */
+    public static function set_environment(Environment $environment) {
         self::$environment = $environment;
     }
 
@@ -67,17 +85,69 @@ class behat_context_helper {
      * that uses direct API calls; steps returning step chains
      * can not be executed like this.
      *
-     * @throws coding_exception
+     * @throws Behat\Behat\Context\Exception\ContextNotFoundException
      * @param string $classname Context identifier (the class name).
      * @return behat_base
      */
     public static function get($classname) {
-
-        if (!$subcontext = self::$environment->getContext($classname)) {
-            throw coding_exception('The required "' . $classname . '" class does not exist');
+        $definedclassname = self::get_theme_override($classname);
+        if ($definedclassname) {
+            return self::$environment->getContext($definedclassname);
         }
 
-        return $subcontext;
+        // Just fall back on getContext to ensure that we throw the correct exception.
+        return self::$environment->getContext($classname);
+    }
+
+    /**
+     * Get the context for the specified component or subsystem.
+     *
+     * @param string $component The component or subsystem to find the context for
+     * @return behat_base|null
+     */
+    public static function get_component_context(string $component): ?behat_base {
+        $component = str_replace('core_', '', $component);
+
+        if ($classname = self::get_theme_override("behat_{$component}")) {
+            return self::get($classname);
+        }
+
+        return null;
+    }
+
+    /**
+     * Check for any theme override of the specified class name.
+     *
+     * @param string $classname
+     * @return string|null
+     */
+    protected static function get_theme_override(string $classname): ?string {
+        $suitename = self::$environment->getSuite()->getName();
+        // If default suite, then get the default theme name.
+        if ($suitename == 'default') {
+            $suitename = theme_config::DEFAULT_THEME;
+        }
+
+        $overrideclassname = "behat_theme_{$suitename}_{$classname}";
+        if (self::$environment->hasContextClass($overrideclassname)) {
+            return $overrideclassname;
+        }
+
+        if (self::$environment->hasContextClass($classname)) {
+            return $classname;
+        }
+
+        return null;
+    }
+
+    /**
+     * Return whether there is a context of the specified classname.
+     *
+     * @param string $classname
+     * @return bool
+     */
+    public static function has_context(string $classname): bool {
+        return self::$environment->hasContextClass($classname);
     }
 
     /**

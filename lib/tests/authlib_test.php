@@ -200,6 +200,59 @@ class core_authlib_testcase extends advanced_testcase {
         $this->assertSame($eventdata['other']['reason'], AUTH_LOGIN_FAILED);
         $this->assertEventContextNotUsed($event);
 
+        // Capture failed login token.
+        unset($CFG->alternateloginurl);
+        unset($CFG->disablelogintoken);
+        $sink = $this->redirectEvents();
+        $result = authenticate_user_login('username1', 'password1', false, $reason, 'invalidtoken');
+        $events = $sink->get_events();
+        $sink->close();
+        $event = array_pop($events);
+
+        $this->assertFalse($result);
+        $this->assertEquals(AUTH_LOGIN_FAILED, $reason);
+        // Test Event.
+        $this->assertInstanceOf('\core\event\user_login_failed', $event);
+        $expectedlogdata = array(SITEID, 'login', 'error', 'index.php', 'username1');
+        $this->assertEventLegacyLogData($expectedlogdata, $event);
+        $eventdata = $event->get_data();
+        $this->assertSame($eventdata['other']['username'], 'username1');
+        $this->assertSame($eventdata['other']['reason'], AUTH_LOGIN_FAILED);
+        $this->assertEventContextNotUsed($event);
+
+        // Login should work with invalid token if CFG login token settings override it.
+        $CFG->alternateloginurl = 'http://localhost/';
+        $sink = $this->redirectEvents();
+        $result = authenticate_user_login('username1', 'password1', false, $reason, 'invalidtoken');
+        $events = $sink->get_events();
+        $sink->close();
+        $this->assertEmpty($events);
+        $this->assertInstanceOf('stdClass', $result);
+        $this->assertEquals(AUTH_LOGIN_OK, $reason);
+
+        unset($CFG->alternateloginurl);
+        $CFG->disablelogintoken = true;
+
+        $sink = $this->redirectEvents();
+        $result = authenticate_user_login('username1', 'password1', false, $reason, 'invalidtoken');
+        $events = $sink->get_events();
+        $sink->close();
+        $this->assertEmpty($events);
+        $this->assertInstanceOf('stdClass', $result);
+        $this->assertEquals(AUTH_LOGIN_OK, $reason);
+
+        unset($CFG->disablelogintoken);
+        // Normal login with valid token.
+        $reason = null;
+        $token = \core\session\manager::get_login_token();
+        $sink = $this->redirectEvents();
+        $result = authenticate_user_login('username1', 'password1', false, $reason, $token);
+        $events = $sink->get_events();
+        $sink->close();
+        $this->assertEmpty($events);
+        $this->assertInstanceOf('stdClass', $result);
+        $this->assertEquals(AUTH_LOGIN_OK, $reason);
+
         $reason = null;
         // Capture failed login event.
         $sink = $this->redirectEvents();
@@ -282,6 +335,75 @@ class core_authlib_testcase extends advanced_testcase {
         $this->assertEquals(AUTH_LOGIN_OK, $reason);
 
         ini_set('error_log', $oldlog);
+
+        // Test password policy check on login.
+        $CFG->passwordpolicy = 0;
+        $CFG->passwordpolicycheckonlogin = 1;
+
+        // First test with password policy disabled.
+        $user4 = $this->getDataGenerator()->create_user(array('username' => 'username4', 'password' => 'a'));
+        $sink = $this->redirectEvents();
+        $reason = null;
+        $result = authenticate_user_login('username4', 'a', false, $reason);
+        $events = $sink->get_events();
+        $sink->close();
+        $notifications = \core\notification::fetch();
+        $this->assertInstanceOf('stdClass', $result);
+        $this->assertEquals(AUTH_LOGIN_OK, $reason);
+        $this->assertEquals(get_user_preferences('auth_forcepasswordchange', false, $result), false);
+        // Check no events.
+        $this->assertEquals(count($events), 0);
+        // Check no notifications.
+        $this->assertEquals(count($notifications), 0);
+
+        // Now test with the password policy enabled, flip reset flag.
+        $sink = $this->redirectEvents();
+        $reason = null;
+        $CFG->passwordpolicy = 1;
+        $result = authenticate_user_login('username4', 'a', false, $reason);
+        $events = $sink->get_events();
+        $sink->close();
+        $this->assertInstanceOf('stdClass', $result);
+        $this->assertEquals(AUTH_LOGIN_OK, $reason);
+        $this->assertEquals(get_user_preferences('auth_forcepasswordchange', true, $result), true);
+        // Check that an event was emitted for the policy failure.
+        $this->assertEquals(count($events), 1);
+        $this->assertEquals(reset($events)->eventname, '\core\event\user_password_policy_failed');
+        // Check notification fired.
+        $notifications = \core\notification::fetch();
+        $this->assertEquals(count($notifications), 1);
+
+        // Now the same tests with a user that passes the password policy.
+        $user5 = $this->getDataGenerator()->create_user(array('username' => 'username5', 'password' => 'ThisPassword1sSecure!'));
+        $reason = null;
+        $CFG->passwordpolicy = 0;
+        $sink = $this->redirectEvents();
+        $result = authenticate_user_login('username5', 'ThisPassword1sSecure!', false, $reason);
+        $events = $sink->get_events();
+        $sink->close();
+        $notifications = \core\notification::fetch();
+        $this->assertInstanceOf('stdClass', $result);
+        $this->assertEquals(AUTH_LOGIN_OK, $reason);
+        $this->assertEquals(get_user_preferences('auth_forcepasswordchange', false, $result), false);
+        // Check no events.
+        $this->assertEquals(count($events), 0);
+        // Check no notifications.
+        $this->assertEquals(count($notifications), 0);
+
+        $reason = null;
+        $CFG->passwordpolicy = 1;
+        $sink = $this->redirectEvents();
+        $result = authenticate_user_login('username5', 'ThisPassword1sSecure!', false, $reason);
+        $events = $sink->get_events();
+        $sink->close();
+        $notifications = \core\notification::fetch();
+        $this->assertInstanceOf('stdClass', $result);
+        $this->assertEquals(AUTH_LOGIN_OK, $reason);
+        $this->assertEquals(get_user_preferences('auth_forcepasswordchange', false, $result), false);
+        // Check no events.
+        $this->assertEquals(count($events), 0);
+        // Check no notifications.
+        $this->assertEquals(count($notifications), 0);
     }
 
     public function test_user_loggedin_event_exceptions() {

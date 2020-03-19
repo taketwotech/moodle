@@ -118,7 +118,7 @@
     $PAGE->set_title("$course->shortname: ".format_string($survey->name));
     $PAGE->set_heading($course->fullname);
     echo $OUTPUT->header();
-    echo $OUTPUT->heading($survey->name);
+    echo $OUTPUT->heading(format_string($survey->name));
 
 /// Check to see if groups are being used in this survey
     if ($groupmode = groups_get_activity_groupmode($cm)) {   // Groups are being used
@@ -472,14 +472,14 @@
          echo "<form action=\"report.php\" method=\"post\">";
          echo "<h3>$strnotes:</h3>";
          echo "<blockquote>";
-         echo "<textarea name=\"notes\" rows=\"10\" cols=\"60\">";
+         echo "<textarea class=\"form-control\" name=\"notes\" rows=\"10\" cols=\"60\">";
          p($notes);
          echo "</textarea><br />";
          echo "<input type=\"hidden\" name=\"action\" value=\"student\" />";
          echo "<input type=\"hidden\" name=\"sesskey\" value=\"".sesskey()."\" />";
          echo "<input type=\"hidden\" name=\"student\" value=\"$student\" />";
          echo "<input type=\"hidden\" name=\"id\" value=\"$cm->id\" />";
-         echo "<input type=\"submit\" value=\"".get_string("savechanges")."\" />";
+         echo "<input type=\"submit\" class=\"btn btn-primary\" value=\"".get_string("savechanges")."\" />";
          echo "</blockquote>";
          echo "</form>";
          echo "</div>";

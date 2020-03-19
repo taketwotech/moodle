@@ -64,7 +64,7 @@ class report_loglive_table_log extends table_sql {
     public function __construct($uniqueid, $filterparams = null) {
         parent::__construct($uniqueid);
 
-        $this->set_attribute('class', 'reportloglive generaltable generalbox');
+        $this->set_attribute('class', 'reportloglive generaltable table-sm');
         $this->set_attribute('aria-live', 'polite');
         $this->filterparams = $filterparams;
         // Add course column if logs are displayed for site.
@@ -116,7 +116,7 @@ class report_loglive_table_log extends table_sql {
      * @return string HTML for the time column
      */
     public function col_time($event) {
-        $recenttimestr = get_string('strftimerecent', 'core_langconfig');
+        $recenttimestr = get_string('strftimedatetime', 'core_langconfig');
         return userdate($event->timecreated, $recenttimestr);
     }
 

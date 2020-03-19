@@ -15,8 +15,7 @@ $confirm = optional_param('confirm', 0, PARAM_BOOL);
 $PAGE->set_url('/admin/editors.php', array('action'=>$action, 'editor'=>$editor));
 $PAGE->set_context(context_system::instance());
 
-require_login();
-require_capability('moodle/site:config', context_system::instance());
+require_admin();
 
 $returnurl = "$CFG->wwwroot/$CFG->admin/settings.php?section=manageeditors";
 
@@ -47,6 +46,7 @@ switch ($action) {
         // remove from enabled list
         $key = array_search($editor, $active_editors);
         unset($active_editors[$key]);
+        add_to_config_log('editor_visibility', '1', '0', $editor);
         break;
 
     case 'enable':
@@ -54,6 +54,7 @@ switch ($action) {
         if (!in_array($editor, $active_editors)) {
             $active_editors[] = $editor;
             $active_editors = array_unique($active_editors);
+            add_to_config_log('editor_visibility', '0', '1', $editor);
         }
         break;
 
@@ -66,6 +67,7 @@ switch ($action) {
                 $fsave = $active_editors[$key];
                 $active_editors[$key] = $active_editors[$key + 1];
                 $active_editors[$key + 1] = $fsave;
+                add_to_config_log('editor_position', $key, $key + 1, $editor);
             }
         }
         break;
@@ -79,6 +81,7 @@ switch ($action) {
                 $fsave = $active_editors[$key];
                 $active_editors[$key] = $active_editors[$key - 1];
                 $active_editors[$key - 1] = $fsave;
+                add_to_config_log('editor_position', $key, $key - 1, $editor);
             }
         }
         break;

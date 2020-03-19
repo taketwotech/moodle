@@ -49,7 +49,8 @@ class behat_grading extends behat_base {
 
         $this->execute('behat_general::click_link', $this->escape($activityname));
 
-        $this->execute('behat_general::click_link', get_string('gradingmanagement', 'grading'));
+        $this->execute('behat_navigation::i_navigate_to_in_current_page_administration',
+            get_string('gradingmanagement', 'grading'));
     }
 
     /**
@@ -65,7 +66,7 @@ class behat_grading extends behat_base {
         $editactionliteral = behat_context_helper::escape(get_string("manageactionedit", "grading"));
 
         // Working both when adding and editing.
-        $definitionxpath = "//a[@class='action']" .
+        $definitionxpath = "//a[@class='action btn btn-lg']" .
             "[./descendant::*[contains(., $newactionliteral) or contains(., $editactionliteral)]]";
 
         $this->execute('behat_grading::i_go_to_advanced_grading_page', $this->escape($activityname));
@@ -86,7 +87,8 @@ class behat_grading extends behat_base {
 
         $this->execute('behat_general::click_link', $this->escape($activityname));
 
-        $this->execute('behat_general::click_link', $this->escape(get_string('viewgrading', 'assign')));
+        $this->execute('behat_navigation::i_navigate_to_in_current_page_administration',
+            get_string('viewgrading', 'mod_assign'));
 
         $this->execute('behat_general::i_click_on_in_the',
                        array(
@@ -157,7 +159,8 @@ class behat_grading extends behat_base {
         $this->execute('behat_forms::press_button', 'Ok');
         $this->execute('behat_general::i_click_on', array($this->escape(get_string('editsettings')), 'link'));
         $this->execute('behat_forms::press_button', get_string('cancel'));
-        $this->execute('behat_general::i_click_on', array($this->escape(get_string('viewgrading', 'mod_assign')), 'link'));
+        $this->execute('behat_navigation::i_navigate_to_in_current_page_administration',
+            get_string('viewgrading', 'mod_assign'));
     }
 
     /**

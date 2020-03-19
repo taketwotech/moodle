@@ -189,6 +189,9 @@ class oci_native_moodle_database extends moodle_database {
             throw new dml_connection_exception($dberr);
         }
 
+        // Disable logging until we are fully setup.
+        $this->query_log_prevent();
+
         // Make sure moodle package is installed - now required.
         if (!$this->oci_package_installed()) {
             try {
@@ -215,6 +218,9 @@ class oci_native_moodle_database extends moodle_database {
 
         //note: do not send "ALTER SESSION SET NLS_NUMERIC_CHARACTERS='.,'" !
         //      instead fix our PHP code to convert "," to "." properly!
+
+        // We can enable logging now.
+        $this->query_log_allow();
 
         // Connection stabilised and configured, going to instantiate the temptables controller
         $this->temptables = new oci_native_moodle_temptables($this, $this->unique_session_id);
@@ -462,29 +468,12 @@ class oci_native_moodle_database extends moodle_database {
     }
 
     /**
-     * Returns detailed information about columns in table. This information is cached internally.
+     * Fetches detailed information about columns in table.
+     *
      * @param string $table name
-     * @param bool $usecache
      * @return array array of database_column_info objects indexed with column names
      */
-    public function get_columns($table, $usecache=true) {
-
-        if ($usecache) {
-            if ($this->temptables->is_temptable($table)) {
-                if ($data = $this->get_temp_tables_cache()->get($table)) {
-                    return $data;
-                }
-            } else {
-                if ($data = $this->get_metacache()->get($table)) {
-                    return $data;
-                }
-            }
-        }
-
-        if (!$table) { // table not specified, return empty array directly
-            return array();
-        }
-
+    protected function fetch_columns(string $table): array {
         $structure = array();
 
         // We give precedence to CHAR_LENGTH for VARCHAR2 columns over WIDTH because the former is always
@@ -665,14 +654,6 @@ class oci_native_moodle_database extends moodle_database {
             }
 
             $structure[$info->name] = new database_column_info($info);
-        }
-
-        if ($usecache) {
-            if ($this->temptables->is_temptable($table)) {
-                $this->get_temp_tables_cache()->set($table, $structure);
-            } else {
-                $this->get_metacache()->set($table, $structure);
-            }
         }
 
         return $structure;

@@ -2,11 +2,11 @@
 
 namespace Box\Spout\Reader\ODS\Helper;
 
+use Box\Spout\Reader\Exception\InvalidValueException;
+
 /**
  * Class CellValueFormatter
  * This class provides helper functions to format cell values
- *
- * @package Box\Spout\Reader\ODS\Helper
  */
 class CellValueFormatter
 {
@@ -23,8 +23,10 @@ class CellValueFormatter
     /** Definition of XML nodes names used to parse data */
     const XML_NODE_P = 'p';
     const XML_NODE_S = 'text:s';
+    const XML_NODE_A = 'text:a';
+    const XML_NODE_SPAN = 'text:span';
 
-    /** Definition of XML attribute used to parse data */
+    /** Definition of XML attributes used to parse data */
     const XML_ATTRIBUTE_TYPE = 'office:value-type';
     const XML_ATTRIBUTE_VALUE = 'office:value';
     const XML_ATTRIBUTE_BOOLEAN_VALUE = 'office:boolean-value';
@@ -33,16 +35,20 @@ class CellValueFormatter
     const XML_ATTRIBUTE_CURRENCY = 'office:currency';
     const XML_ATTRIBUTE_C = 'text:c';
 
-    /** @var \Box\Spout\Common\Escaper\ODS Used to unescape XML data */
+    /** @var bool Whether date/time values should be returned as PHP objects or be formatted as strings */
+    protected $shouldFormatDates;
+
+    /** @var \Box\Spout\Common\Helper\Escaper\ODS Used to unescape XML data */
     protected $escaper;
 
     /**
-     *
+     * @param bool $shouldFormatDates Whether date/time values should be returned as PHP objects or be formatted as strings
+     * @param \Box\Spout\Common\Helper\Escaper\ODS $escaper Used to unescape XML data
      */
-    public function __construct()
+    public function __construct($shouldFormatDates, $escaper)
     {
-        /** @noinspection PhpUnnecessaryFullyQualifiedNameInspection */
-        $this->escaper = new \Box\Spout\Common\Escaper\ODS();
+        $this->shouldFormatDates = $shouldFormatDates;
+        $this->escaper = $escaper;
     }
 
     /**
@@ -50,7 +56,8 @@ class CellValueFormatter
      * @see http://docs.oasis-open.org/office/v1.2/os/OpenDocument-v1.2-os-part1.html#refTable13
      *
      * @param \DOMNode $node
-     * @return string|int|float|bool|\DateTime|\DateInterval|null The value associated with the cell, empty string if cell's type is void/undefined, null on error
+     * @throws InvalidValueException If the node value is not valid
+     * @return string|int|float|bool|\DateTime|\DateInterval The value associated with the cell, empty string if cell's type is void/undefined
      */
     public function extractAndFormatNodeValue($node)
     {
@@ -94,10 +101,12 @@ class CellValueFormatter
             foreach ($pNode->childNodes as $childNode) {
                 if ($childNode instanceof \DOMText) {
                     $currentPValue .= $childNode->nodeValue;
-                } else if ($childNode->nodeName === self::XML_NODE_S) {
+                } elseif ($childNode->nodeName === self::XML_NODE_S) {
                     $spaceAttribute = $childNode->getAttribute(self::XML_ATTRIBUTE_C);
-                    $numSpaces = (!empty($spaceAttribute)) ? intval($spaceAttribute) : 1;
+                    $numSpaces = (!empty($spaceAttribute)) ? (int) $spaceAttribute : 1;
                     $currentPValue .= str_repeat(' ', $numSpaces);
+                } elseif ($childNode->nodeName === self::XML_NODE_A || $childNode->nodeName === self::XML_NODE_SPAN) {
+                    $currentPValue .= $childNode->nodeValue;
                 }
             }
 
@@ -106,6 +115,7 @@ class CellValueFormatter
 
         $escapedCellValue = implode("\n", $pNodeValues);
         $cellValue = $this->escaper->unescape($escapedCellValue);
+
         return $cellValue;
     }
 
@@ -118,8 +128,11 @@ class CellValueFormatter
     protected function formatFloatCellValue($node)
     {
         $nodeValue = $node->getAttribute(self::XML_ATTRIBUTE_VALUE);
-        $nodeIntValue = intval($nodeValue);
-        $cellValue = ($nodeIntValue == $nodeValue) ? $nodeIntValue : floatval($nodeValue);
+
+        $nodeIntValue = (int) $nodeValue;
+        $nodeFloatValue = (float) $nodeValue;
+        $cellValue = ((float) $nodeIntValue === $nodeFloatValue) ? $nodeIntValue : $nodeFloatValue;
+
         return $cellValue;
     }
 
@@ -132,41 +145,70 @@ class CellValueFormatter
     protected function formatBooleanCellValue($node)
     {
         $nodeValue = $node->getAttribute(self::XML_ATTRIBUTE_BOOLEAN_VALUE);
-        // !! is similar to boolval()
-        $cellValue = !!$nodeValue;
-        return $cellValue;
+
+        return (bool) $nodeValue;
     }
 
     /**
      * Returns the cell Date value from the given node.
      *
      * @param \DOMNode $node
-     * @return \DateTime|null The value associated with the cell or NULL if invalid date value
+     * @throws InvalidValueException If the value is not a valid date
+     * @return \DateTime|string The value associated with the cell
      */
     protected function formatDateCellValue($node)
     {
-        try {
+        // The XML node looks like this:
+        // <table:table-cell calcext:value-type="date" office:date-value="2016-05-19T16:39:00" office:value-type="date">
+        //   <text:p>05/19/16 04:39 PM</text:p>
+        // </table:table-cell>
+
+        if ($this->shouldFormatDates) {
+            // The date is already formatted in the "p" tag
+            $nodeWithValueAlreadyFormatted = $node->getElementsByTagName(self::XML_NODE_P)->item(0);
+            $cellValue = $nodeWithValueAlreadyFormatted->nodeValue;
+        } else {
+            // otherwise, get it from the "date-value" attribute
             $nodeValue = $node->getAttribute(self::XML_ATTRIBUTE_DATE_VALUE);
-            return new \DateTime($nodeValue);
-        } catch (\Exception $e) {
-            return null;
+            try {
+                $cellValue = new \DateTime($nodeValue);
+            } catch (\Exception $e) {
+                throw new InvalidValueException($nodeValue);
+            }
         }
+
+        return $cellValue;
     }
 
     /**
      * Returns the cell Time value from the given node.
      *
      * @param \DOMNode $node
-     * @return \DateInterval|null The value associated with the cell or NULL if invalid time value
+     * @throws InvalidValueException If the value is not a valid time
+     * @return \DateInterval|string The value associated with the cell
      */
     protected function formatTimeCellValue($node)
     {
-        try {
+        // The XML node looks like this:
+        // <table:table-cell calcext:value-type="time" office:time-value="PT13H24M00S" office:value-type="time">
+        //   <text:p>01:24:00 PM</text:p>
+        // </table:table-cell>
+
+        if ($this->shouldFormatDates) {
+            // The date is already formatted in the "p" tag
+            $nodeWithValueAlreadyFormatted = $node->getElementsByTagName(self::XML_NODE_P)->item(0);
+            $cellValue = $nodeWithValueAlreadyFormatted->nodeValue;
+        } else {
+            // otherwise, get it from the "time-value" attribute
             $nodeValue = $node->getAttribute(self::XML_ATTRIBUTE_TIME_VALUE);
-            return new \DateInterval($nodeValue);
-        } catch (\Exception $e) {
-            return null;
+            try {
+                $cellValue = new \DateInterval($nodeValue);
+            } catch (\Exception $e) {
+                throw new InvalidValueException($nodeValue);
+            }
         }
+
+        return $cellValue;
     }
 
     /**

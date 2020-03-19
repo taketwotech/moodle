@@ -68,7 +68,7 @@ class qtype_multianswer_renderer extends qtype_renderer {
         }
 
         $this->page->requires->js_init_call('M.qtype_multianswer.init',
-                array('#q' . $qa->get_slot()), false, array(
+                array('#' . $qa->get_outer_question_div_unique_id()), false, array(
                     'name'     => 'qtype_multianswer',
                     'fullpath' => '/question/type/multianswer/module.js',
                     'requires' => array('base', 'node', 'event', 'overlay'),
@@ -222,6 +222,7 @@ class qtype_multianswer_textfield_renderer extends qtype_multianswer_subq_render
             'value' => $response,
             'id' => $qa->get_qt_field_name($fieldname),
             'size' => $size,
+            'class' => 'form-control mb-1',
         );
         if ($options->readonly) {
             $inputattributes['readonly'] = 'readonly';
@@ -229,7 +230,7 @@ class qtype_multianswer_textfield_renderer extends qtype_multianswer_subq_render
 
         $feedbackimg = '';
         if ($options->correctness) {
-            $inputattributes['class'] = $this->feedback_class($matchinganswer->fraction);
+            $inputattributes['class'] .= ' ' . $this->feedback_class($matchinganswer->fraction);
             $feedbackimg = $this->feedback_image($matchinganswer->fraction);
         }
 
@@ -244,7 +245,7 @@ class qtype_multianswer_textfield_renderer extends qtype_multianswer_subq_render
                         $qa, 'question', 'answerfeedback', $matchinganswer->id),
                 s($correctanswer->answer), $options);
 
-        $output = html_writer::start_tag('span', array('class' => 'subquestion'));
+        $output = html_writer::start_tag('span', array('class' => 'subquestion form-inline d-inline'));
         $output .= html_writer::tag('label', get_string('answer'),
                 array('class' => 'subq accesshide', 'for' => $inputattributes['id']));
         $output .= html_writer::empty_tag('input', $inputattributes);
@@ -593,7 +594,7 @@ class qtype_multianswer_multiresponse_vertical_renderer extends qtype_multianswe
         if ($options->rightanswer) {
             $correct = [];
             foreach ($subq->answers as $ans) {
-                if (question_state::graded_state_for_fraction($ans->fraction) == question_state::$gradedpartial) {
+                if (question_state::graded_state_for_fraction($ans->fraction) != question_state::$gradedwrong) {
                     $correct[] = $subq->format_text($ans->answer, $ans->answerformat, $qa, 'question', 'answer', $ans->id);
                 }
             }

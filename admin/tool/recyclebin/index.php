@@ -52,7 +52,7 @@ switch ($context->contextlevel) {
     break;
 
     case CONTEXT_COURSECAT:
-        require_login();
+        require_login(null, false);
 
         $recyclebin = new \tool_recyclebin\category_bin($context->instanceid);
         if (!$recyclebin->can_view()) {
@@ -187,7 +187,7 @@ foreach ($items as $item) {
         if (isset($modules[$item->module])) {
             $mod = $modules[$item->module];
             $modname = get_string('modulename', $mod->name);
-            $name = '<img src="' . $OUTPUT->pix_url('icon', $mod->name) . '" class="icon" alt="' . $modname . '" /> ' . $name;
+            $name = $OUTPUT->image_icon('icon', $modname, $mod->name) . $name;
         }
     }
 

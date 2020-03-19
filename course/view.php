@@ -217,8 +217,6 @@
 
     $completion = new completion_info($course);
     if ($completion->is_enabled()) {
-        $PAGE->requires->string_for_js('completion-title-manual-y', 'completion');
-        $PAGE->requires->string_for_js('completion-title-manual-n', 'completion');
         $PAGE->requires->string_for_js('completion-alt-manual-y', 'completion');
         $PAGE->requires->string_for_js('completion-alt-manual-n', 'completion');
 
@@ -244,6 +242,16 @@
 
     $PAGE->set_heading($course->fullname);
     echo $OUTPUT->header();
+
+    if ($USER->editing == 1 && !empty($CFG->enableasyncbackup)) {
+
+        // MDL-65321 The backup libraries are quite heavy, only require the bare minimum.
+        require_once($CFG->dirroot . '/backup/util/helper/async_helper.class.php');
+
+        if (async_helper::is_async_pending($id, 'course', 'backup')) {
+            echo $OUTPUT->notification(get_string('pendingasyncedit', 'backup'), 'warning');
+        }
+    }
 
     if ($completion->is_enabled()) {
         // This value tracks whether there has been a dynamic change to the page.

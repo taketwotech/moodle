@@ -117,10 +117,10 @@ class report_performance {
      */
     public function add_issue_to_table(&$table, $issueresult, $detailed = false) {
         global $OUTPUT;
-        $statusarr = array(self::REPORT_PERFORMANCE_OK => 'statusok',
-                        self::REPORT_PERFORMANCE_WARNING => 'statuswarning',
-                        self::REPORT_PERFORMANCE_SERIOUS => 'statusserious',
-                        self::REPORT_PERFORMANCE_CRITICAL => 'statuscritical');
+        $statusarr = array(self::REPORT_PERFORMANCE_OK => 'badge badge-success',
+                        self::REPORT_PERFORMANCE_WARNING => 'badge badge-warning',
+                        self::REPORT_PERFORMANCE_SERIOUS => 'badge badge-danger',
+                        self::REPORT_PERFORMANCE_CRITICAL => 'badge badge-danger');
 
         $row = array();
         if ($detailed) {
@@ -132,8 +132,7 @@ class report_performance {
         $row[1] = html_writer::tag('span', $issueresult->statusstr, array('class' => $statusarr[$issueresult->status]));
         $row[2] = $issueresult->comment;
         if (!empty($issueresult->configlink)) {
-            $editicon = html_writer::empty_tag('img', array('alt' => $issueresult->issue, 'class' => 'icon',
-                'src' => $OUTPUT->pix_url('i/settings')));
+            $editicon = $OUTPUT->pix_icon('i/settings', $issueresult->issue);
             $row[3] = $OUTPUT->action_link($issueresult->configlink, $editicon);
         } else {
             $row[3] = '';

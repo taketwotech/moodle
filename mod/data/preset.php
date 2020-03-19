@@ -51,6 +51,7 @@ require_capability('mod/data:managetemplates', $context);
 $PAGE->set_url(new moodle_url('/mod/data/preset.php', array('d'=>$data->id)));
 $PAGE->set_title(get_string('course') . ': ' . $course->fullname);
 $PAGE->set_heading($course->fullname);
+$PAGE->force_settings_menu(true);
 
 // fill in missing properties needed for updating of instance
 $data->course     = $cm->course;
@@ -69,13 +70,13 @@ foreach ($presets as &$preset) {
         $preset->description = $preset->name;
         if (data_user_can_delete_preset($context, $preset) && $preset->name != 'Image gallery') {
             $delurl = new moodle_url('/mod/data/preset.php', array('d'=> $data->id, 'action'=>'confirmdelete', 'fullname'=>$preset->userid.'/'.$preset->shortname, 'sesskey'=>sesskey()));
-            $delicon = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/delete'), 'class'=>'iconsmall', 'alt'=>$strdelete.' '.$preset->description));
+            $delicon = $OUTPUT->pix_icon('t/delete', $strdelete . ' ' . $preset->description);
             $preset->description .= html_writer::link($delurl, $delicon);
         }
     }
     if ($preset->userid > 0 && data_user_can_delete_preset($context, $preset)) {
         $delurl = new moodle_url('/mod/data/preset.php', array('d'=> $data->id, 'action'=>'confirmdelete', 'fullname'=>$preset->userid.'/'.$preset->shortname, 'sesskey'=>sesskey()));
-        $delicon = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/delete'), 'class'=>'iconsmall', 'alt'=>$strdelete.' '.$preset->description));
+        $delicon = $OUTPUT->pix_icon('t/delete', $strdelete . ' ' . $preset->description);
         $preset->description .= html_writer::link($delurl, $delicon);
     }
 }
@@ -139,6 +140,10 @@ if (optional_param('sesskey', false, PARAM_BOOL) && confirm_sesskey()) {
         header('Expires: 0');
         header('Cache-Control: must-revalidate,post-check=0,pre-check=0');
         header('Pragma: public');
+
+        // If this file was requested from a form, then mark download as complete.
+        \core_form\util::form_download_complete();
+
         $exportfilehandler = fopen($exportfile, 'rb');
         print fread($exportfilehandler, filesize($exportfile));
         fclose($exportfilehandler);

@@ -162,24 +162,12 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/templates', 'mod_lti/e
     var showCartridgeRegistration = function(url) {
         hideExternalRegistration();
         hideRegistrationChoices();
-        getCartridgeRegistrationContainer().removeClass('hidden');
-        getCartridgeRegistrationContainer().find(SELECTORS.CARTRIDGE_REGISTRATION_FORM).attr('data-cartridge-url', url);
-        screenReaderAnnounce(getCartridgeRegistrationContainer());
-    };
-
-    /**
-     * JAWS does not notice visibility changes with aria-live.
-     * Remove and add the content back to force it to read it out.
-     * This function can be removed once JAWS supports visibility.
-     *
-     * @method screenReaderAnnounce
-     * @param {Object} element
-     * @private
-     */
-    var screenReaderAnnounce = function(element) {
-        var childClones = element.children().clone(true, true);
-        element.empty();
-        element.append(childClones);
+        // Don't save the key and secret from the last tool.
+        var container = getCartridgeRegistrationContainer();
+        container.find('input').val('');
+        container.removeClass('hidden');
+        container.find(SELECTORS.CARTRIDGE_REGISTRATION_FORM).attr('data-cartridge-url', url);
+        screenReaderAnnounce(container);
     };
 
     /**
@@ -194,6 +182,20 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/templates', 'mod_lti/e
         hideCartridgeRegistration();
         getRegistrationChoiceContainer().removeClass('hidden');
         screenReaderAnnounce(getRegistrationChoiceContainer());
+    };
+
+    /**
+     * JAWS does not notice visibility changes with aria-live.
+     * Remove and add the content back to force it to read it out.
+     * This function can be removed once JAWS supports visibility.
+     *
+     * @method screenReaderAnnounce
+     * @param {Object} element
+     * @private
+     */
+    var screenReaderAnnounce = function(element) {
+        var children = element.children().detach();
+        children.appendTo(element);
     };
 
     /**

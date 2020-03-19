@@ -44,7 +44,7 @@ class mod_choice_renderer extends plugin_renderer_base {
         $disabled = empty($options['previewonly']) ? array() : array('disabled' => 'disabled');
 
         $html = html_writer::start_tag('form', $attributes);
-        $html .= html_writer::start_tag('ul', array('class'=>'choices' ));
+        $html .= html_writer::start_tag('ul', array('class' => 'choices list-unstyled unstyled'));
 
         $availableoption = count($options['options']);
         $choicecount = 0;
@@ -59,6 +59,7 @@ class mod_choice_renderer extends plugin_renderer_base {
                 $option->attributes->type = 'radio';
             }
             $option->attributes->id = 'choice_'.$choicecount;
+            $option->attributes->class = 'mx-1';
 
             $labeltext = $option->text;
             if (!empty($option->attributes->disabled)) {
@@ -82,14 +83,17 @@ class mod_choice_renderer extends plugin_renderer_base {
                 if ($availableoption < 1) {
                     $html .= html_writer::tag('label', get_string('choicefull', 'choice'));
                 } else {
-                    $html .= html_writer::empty_tag('input',
-                            array('type' => 'submit', 'value' => get_string('savemychoice', 'choice'), 'class' => 'button'));
+                    $html .= html_writer::empty_tag('input', array(
+                        'type' => 'submit',
+                        'value' => get_string('savemychoice', 'choice'),
+                        'class' => 'btn btn-primary'
+                    ));
                 }
 
                 if (!empty($options['allowupdate']) && ($options['allowupdate'])) {
                     $url = new moodle_url('view.php',
                             array('id' => $coursemoduleid, 'action' => 'delchoice', 'sesskey' => sesskey()));
-                    $html .= html_writer::link($url, get_string('removemychoice', 'choice'));
+                    $html .= html_writer::link($url, get_string('removemychoice', 'choice'), array('class' => 'ml-1'));
                 }
             } else {
                 $html .= html_writer::tag('label', get_string('havetologin', 'choice'));
@@ -129,7 +133,7 @@ class mod_choice_renderer extends plugin_renderer_base {
      * @return string
      */
     public function display_publish_name_vertical($choices) {
-        global $PAGE;
+        global $PAGE, $OUTPUT;
         $html ='';
         $html .= html_writer::tag('h3',format_string(get_string("responses", "choice")));
 
@@ -147,7 +151,7 @@ class mod_choice_renderer extends plugin_renderer_base {
         $table = new html_table();
         $table->cellpadding = 0;
         $table->cellspacing = 0;
-        $table->attributes['class'] = 'results names ';
+        $table->attributes['class'] = 'results names table table-bordered';
         $table->tablealign = 'center';
         $table->summary = get_string('responsesto', 'choice', format_string($choices->name));
         $table->data = array();
@@ -171,25 +175,46 @@ class mod_choice_renderer extends plugin_renderer_base {
         $usernumberheader->text = get_string('numberofuser', 'choice');
         $columns['usernumber'][] = $usernumberheader;
 
-
+        $optionsnames = [];
         foreach ($choices->options as $optionid => $options) {
             $celloption = clone($celldefault);
             $cellusernumber = clone($celldefault);
-            $cellusernumber->style = 'text-align: center;';
 
-            $celltext = '';
             if ($choices->showunanswered && $optionid == 0) {
-                $celltext = format_string(get_string('notanswered', 'choice'));
+                $headertitle = get_string('notanswered', 'choice');
             } else if ($optionid > 0) {
-                $celltext = format_string($choices->options[$optionid]->text);
+                $headertitle = format_string($choices->options[$optionid]->text);
+            }
+            $celltext = $headertitle;
+
+            // Render select/deselect all checkbox for this option.
+            if ($choices->viewresponsecapability && $choices->deleterepsonsecapability) {
+
+                // Build the select/deselect all for this option.
+                $selectallid = 'select-response-option-' . $optionid;
+                $togglegroup = 'responses response-option-' . $optionid;
+                $selectalltext = get_string('selectalloption', 'choice', $headertitle);
+                $deselectalltext = get_string('deselectalloption', 'choice', $headertitle);
+                $mastercheckbox = new \core\output\checkbox_toggleall($togglegroup, true, [
+                    'id' => $selectallid,
+                    'name' => $selectallid,
+                    'value' => 1,
+                    'selectall' => $selectalltext,
+                    'deselectall' => $deselectalltext,
+                    'label' => $selectalltext,
+                    'labelclasses' => 'accesshide',
+                ]);
+
+                $celltext .= html_writer::div($OUTPUT->render($mastercheckbox));
             }
             $numberofuser = 0;
             if (!empty($options->user) && count($options->user) > 0) {
                 $numberofuser = count($options->user);
             }
 
-            $celloption->text = $celltext;
-            $cellusernumber->text = $numberofuser;
+            $celloption->text = html_writer::div($celltext, 'text-center');
+            $optionsnames[$optionid] = $celltext;
+            $cellusernumber->text = html_writer::div($numberofuser, 'text-center');
 
             $columns['options'][] = $celloption;
             $columns['usernumber'][] = $cellusernumber;
@@ -217,25 +242,39 @@ class mod_choice_renderer extends plugin_renderer_base {
                     $optionusers = '';
                     foreach ($options->user as $user) {
                         $data = '';
-                        if (empty($user->imagealt)){
+                        if (empty($user->imagealt)) {
                             $user->imagealt = '';
                         }
 
                         $userfullname = fullname($user, $choices->fullnamecapability);
-                        if ($choices->viewresponsecapability && $choices->deleterepsonsecapability  && $optionid > 0) {
-                            $attemptaction = html_writer::label($userfullname, 'attempt-user'.$user->id, false, array('class' => 'accesshide'));
-                            $attemptaction .= html_writer::checkbox('attemptid[]', $user->answerid, '', null,
-                                    array('id' => 'attempt-user'.$user->id));
-                            $data .= html_writer::tag('div', $attemptaction, array('class'=>'attemptaction'));
-                        }
-                        $userimage = $this->output->user_picture($user, array('courseid'=>$choices->courseid));
-                        $data .= html_writer::tag('div', $userimage, array('class'=>'image'));
+                        $checkbox = '';
+                        if ($choices->viewresponsecapability && $choices->deleterepsonsecapability) {
+                            $checkboxid = 'attempt-user' . $user->id . '-option' . $optionid;
+                            if ($optionid > 0) {
+                                $checkboxname = 'attemptid[]';
+                                $checkboxvalue = $user->answerid;
+                            } else {
+                                $checkboxname = 'userid[]';
+                                $checkboxvalue = $user->id;
+                            }
 
-                        $userlink = new moodle_url('/user/view.php', array('id'=>$user->id,'course'=>$choices->courseid));
-                        $name = html_writer::tag('a', $userfullname, array('href'=>$userlink, 'class'=>'username'));
-                        $data .= html_writer::tag('div', $name, array('class'=>'fullname'));
-                        $data .= html_writer::tag('div','', array('class'=>'clearfloat'));
-                        $optionusers .= html_writer::tag('div', $data, array('class'=>'user'));
+                            $togglegroup = 'responses response-option-' . $optionid;
+                            $slavecheckbox = new \core\output\checkbox_toggleall($togglegroup, false, [
+                                'id' => $checkboxid,
+                                'name' => $checkboxname,
+                                'classes' => 'mr-1',
+                                'value' => $checkboxvalue,
+                                'label' => $userfullname . ' ' . $options->text,
+                                'labelclasses' => 'accesshide',
+                            ]);
+                            $checkbox = $OUTPUT->render($slavecheckbox);
+                        }
+                        $userimage = $this->output->user_picture($user, array('courseid' => $choices->courseid, 'link' => false));
+                        $profileurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $choices->courseid));
+                        $profilelink = html_writer::link($profileurl, $userimage . $userfullname);
+                        $data .= html_writer::div($checkbox . $profilelink, 'mb-1');
+
+                        $optionusers .= $data;
                     }
                     $cell->text = $optionusers;
                 }
@@ -250,20 +289,35 @@ class mod_choice_renderer extends plugin_renderer_base {
 
         $actiondata = '';
         if ($choices->viewresponsecapability && $choices->deleterepsonsecapability) {
-            $selecturl = new moodle_url('#');
-
-            $selectallactions = new component_action('click',"checkall");
-            $selectall = new action_link($selecturl, get_string('selectall'), $selectallactions);
-            $actiondata .= $this->output->render($selectall) . ' / ';
-
-            $deselectallactions = new component_action('click',"checknone");
-            $deselectall = new action_link($selecturl, get_string('deselectall'), $deselectallactions);
-            $actiondata .= $this->output->render($deselectall);
-
-            $actiondata .= html_writer::tag('label', ' ' . get_string('withselected', 'choice') . ' ', array('for'=>'menuaction'));
+            // Build the select/deselect all for all of options.
+            $selectallid = 'select-all-responses';
+            $togglegroup = 'responses';
+            $selectallcheckbox = new \core\output\checkbox_toggleall($togglegroup, true, [
+                'id' => $selectallid,
+                'name' => $selectallid,
+                'value' => 1,
+                'label' => get_string('selectall'),
+                'classes' => 'btn-secondary mr-1'
+            ], true);
+            $actiondata .= $OUTPUT->render($selectallcheckbox);
 
             $actionurl = new moodle_url($PAGE->url, array('sesskey'=>sesskey(), 'action'=>'delete_confirmation()'));
-            $select = new single_select($actionurl, 'action', array('delete'=>get_string('delete')), null, array(''=>get_string('chooseaction', 'choice')), 'attemptsform');
+            $actionoptions = array('delete' => get_string('delete'));
+            foreach ($choices->options as $optionid => $option) {
+                if ($optionid > 0) {
+                    $actionoptions['choose_'.$optionid] = get_string('chooseoption', 'choice', $option->text);
+                }
+            }
+            $selectattributes = [
+                'data-action' => 'toggle',
+                'data-togglegroup' => 'responses',
+                'data-toggle' => 'action',
+            ];
+            $selectnothing = ['' => get_string('chooseaction', 'choice')];
+            $select = new single_select($actionurl, 'action', $actionoptions, null, $selectnothing, 'attemptsform');
+            $select->set_label(get_string('withselected', 'choice'));
+            $select->disabled = true;
+            $select->attributes = $selectattributes;
 
             $actiondata .= $this->output->render($select);
         }

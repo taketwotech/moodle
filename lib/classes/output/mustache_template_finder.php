@@ -76,10 +76,16 @@ class mustache_template_finder {
 
         // First check the theme.
         $dirs[] = $CFG->dirroot . '/theme/' . $themename . '/templates/' . $component . '/';
+        if (isset($CFG->themedir)) {
+            $dirs[] = $CFG->themedir . '/' . $themename . '/templates/' . $component . '/';
+        }
         // Now check the parent themes.
         // Search each of the parent themes second.
         foreach ($parents as $parent) {
             $dirs[] = $CFG->dirroot . '/theme/' . $parent . '/templates/' . $component . '/';
+            if (isset($CFG->themedir)) {
+                $dirs[] = $CFG->themedir . '/' . $parent . '/templates/' . $component . '/';
+            }
         }
 
         $dirs[] = $compdirectory . '/templates/';
@@ -101,11 +107,9 @@ class mustache_template_finder {
             throw new coding_exception('Templates names must be specified as "componentname/templatename"' .
                                        ' (' . s($name) . ' requested) ');
         }
+
         list($component, $templatename) = explode('/', $name, 2);
         $component = clean_param($component, PARAM_COMPONENT);
-        if (strpos($templatename, '/') !== false) {
-            throw new coding_exception('Templates cannot be placed in sub directories (' . s($name) . ' requested)');
-        }
 
         $dirs = self::get_template_directories_for_component($component, $themename);
 
@@ -116,6 +120,6 @@ class mustache_template_finder {
             }
         }
 
-        throw new moodle_exception('filenotfound', 'error');
+        throw new moodle_exception('filenotfound', 'error', '', null, $name);
     }
 }

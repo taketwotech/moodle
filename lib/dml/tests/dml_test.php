@@ -2321,7 +2321,7 @@ class core_dml_testcase extends database_driver_testcase {
         $record->id = '1';
         $record->course = '1';
         $record->oneint = null;
-        $record->onenum = '1.00';
+        $record->onenum = 1.0;
         $record->onechar = 'a';
         $record->onetext = 'aaa';
 
@@ -2405,6 +2405,68 @@ class core_dml_testcase extends database_driver_testcase {
         } catch (moodle_exception $e) {
             $this->assertInstanceOf('coding_exception', $e);
         }
+    }
+
+    public function test_insert_record_with_nullable_unique_index() {
+        $DB = $this->tdb;
+        $dbman = $DB->get_manager();
+
+        $table = $this->get_test_table();
+        $tablename = $table->getName();
+
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('notnull1', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('nullable1', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('nullable2', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->add_index('notnull1-nullable1-nullable2', XMLDB_INDEX_UNIQUE,
+                array('notnull1', 'nullable1', 'nullable2'));
+        $dbman->create_table($table);
+
+        // Insert one record. Should be OK (no exception).
+        $DB->insert_record($tablename, (object) ['notnull1' => 1, 'nullable1' => 1, 'nullable2' => 1]);
+
+        $this->assertEquals(1, $DB->count_records($table->getName()));
+        $this->assertEquals(1, $DB->count_records($table->getName(), ['nullable1' => 1]));
+
+        // Inserting a duplicate should fail.
+        try {
+            $DB->insert_record($tablename, (object) ['notnull1' => 1, 'nullable1' => 1, 'nullable2' => 1]);
+            $this->fail('dml_write_exception expected when a record violates a unique index');
+        } catch (moodle_exception $e) {
+            $this->assertInstanceOf('dml_write_exception', $e);
+        }
+
+        $this->assertEquals(1, $DB->count_records($table->getName()));
+        $this->assertEquals(1, $DB->count_records($table->getName(), ['nullable1' => 1]));
+
+        // Inserting a record with nulls in the nullable columns should work.
+        $DB->insert_record($tablename, (object) ['notnull1' => 1, 'nullable1' => null, 'nullable2' => null]);
+
+        $this->assertEquals(2, $DB->count_records($table->getName()));
+        $this->assertEquals(1, $DB->count_records($table->getName(), ['nullable1' => 1]));
+        $this->assertEquals(1, $DB->count_records($table->getName(), ['nullable1' => null]));
+
+        // And it should be possible to insert a duplicate.
+        $DB->insert_record($tablename, (object) ['notnull1' => 1, 'nullable1' => null, 'nullable2' => null]);
+
+        $this->assertEquals(3, $DB->count_records($table->getName()));
+        $this->assertEquals(1, $DB->count_records($table->getName(), ['nullable1' => 1]));
+        $this->assertEquals(2, $DB->count_records($table->getName(), ['nullable1' => null]));
+
+        // Same, but with only one of the nullable columns being null.
+        $DB->insert_record($tablename, (object) ['notnull1' => 1, 'nullable1' => 1, 'nullable2' => null]);
+
+        $this->assertEquals(4, $DB->count_records($table->getName()));
+        $this->assertEquals(2, $DB->count_records($table->getName(), ['nullable1' => 1]));
+        $this->assertEquals(2, $DB->count_records($table->getName(), ['nullable1' => null]));
+
+        $DB->insert_record($tablename, (object) ['notnull1' => 1, 'nullable1' => 1, 'nullable2' => null]);
+
+        $this->assertEquals(5, $DB->count_records($table->getName()));
+        $this->assertEquals(3, $DB->count_records($table->getName(), ['nullable1' => 1]));
+        $this->assertEquals(2, $DB->count_records($table->getName(), ['nullable1' => null]));
+
     }
 
     public function test_import_record() {
@@ -3829,7 +3891,7 @@ class core_dml_testcase extends database_driver_testcase {
         }
     }
 
-    public function test_sql_binary_equal() {
+    public function test_sql_equal() {
         $DB = $this->tdb;
         $dbman = $DB->get_manager();
 
@@ -3838,20 +3900,51 @@ class core_dml_testcase extends database_driver_testcase {
 
         $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
         $table->add_field('name', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+        $table->add_field('name2', XMLDB_TYPE_CHAR, '255', null, null, null, null);
         $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
         $dbman->create_table($table);
 
-        $DB->insert_record($tablename, array('name'=>'aaa'));
-        $DB->insert_record($tablename, array('name'=>'aáa'));
-        $DB->insert_record($tablename, array('name'=>'aäa'));
-        $DB->insert_record($tablename, array('name'=>'bbb'));
-        $DB->insert_record($tablename, array('name'=>'BBB'));
+        $DB->insert_record($tablename, array('name' => 'one', 'name2' => 'one'));
+        $DB->insert_record($tablename, array('name' => 'ONE', 'name2' => 'ONE'));
+        $DB->insert_record($tablename, array('name' => 'two', 'name2' => 'TWO'));
+        $DB->insert_record($tablename, array('name' => 'öne', 'name2' => 'one'));
+        $DB->insert_record($tablename, array('name' => 'öne', 'name2' => 'ÖNE'));
 
-        $records = $DB->get_records_sql("SELECT * FROM {{$tablename}} WHERE name = ?", array('bbb'));
-        $this->assertEquals(1, count($records), 'SQL operator "=" is expected to be case sensitive');
+        // Case sensitive and accent sensitive (equal and not equal).
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', '?', true, true, false);
+        $records = $DB->get_records_sql($sql, array('one'));
+        $this->assertCount(1, $records);
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', ':name', true, true, true);
+        $records = $DB->get_records_sql($sql, array('name' => 'one'));
+        $this->assertCount(4, $records);
+        // And with column comparison instead of params.
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', 'name2', true, true, false);
+        $records = $DB->get_records_sql($sql);
+        $this->assertCount(2, $records);
 
-        $records = $DB->get_records_sql("SELECT * FROM {{$tablename}} WHERE name = ?", array('aaa'));
-        $this->assertEquals(1, count($records), 'SQL operator "=" is expected to be accent sensitive');
+        // Case insensitive and accent sensitive (equal and not equal).
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', '?', false, true, false);
+        $records = $DB->get_records_sql($sql, array('one'));
+        $this->assertCount(2, $records);
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', ':name', false, true, true);
+        $records = $DB->get_records_sql($sql, array('name' => 'one'));
+        $this->assertCount(3, $records);
+        // And with column comparison instead of params.
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', 'name2', false, true, false);
+        $records = $DB->get_records_sql($sql);
+        $this->assertCount(4, $records);
+
+        // TODO: Accent insensitive is not cross-db, only some drivers support it, so just verify the queries work.
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', '?', true, false);
+        $records = $DB->get_records_sql($sql, array('one'));
+        $this->assertGreaterThanOrEqual(1, count($records)); // At very least, there is 1 record with CS/AI "one".
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', '?', false, false);
+        $records = $DB->get_records_sql($sql, array('one'));
+        $this->assertGreaterThanOrEqual(2, count($records)); // At very least, there are 2 records with CI/AI "one".
+        // And with column comparison instead of params.
+        $sql = "SELECT * FROM {{$tablename}} WHERE " . $DB->sql_equal('name', 'name2', false, false);
+        $records = $DB->get_records_sql($sql);
+        $this->assertGreaterThanOrEqual(4, count($records)); // At very least, there are 4 records with CI/AI names matching.
     }
 
     public function test_sql_like() {
@@ -4146,6 +4239,9 @@ class core_dml_testcase extends database_driver_testcase {
             $this->fail("Expecting an exception, none occurred");
         } catch (moodle_exception $e) {
             $this->assertInstanceOf('coding_exception', $e);
+        } catch (Error $error) {
+            // PHP 7.1 throws Error even earlier.
+            $this->assertRegExp('/Too few arguments to function/', $error->getMessage());
         }
 
         // Cover the function using placeholders in all positions.
@@ -4313,6 +4409,9 @@ class core_dml_testcase extends database_driver_testcase {
     public function test_sql_regex() {
         $DB = $this->tdb;
         $dbman = $DB->get_manager();
+        if (!$DB->sql_regex_supported()) {
+            $this->markTestSkipped($DB->get_name().' does not support regular expressions');
+        }
 
         $table = $this->get_test_table();
         $tablename = $table->getName();
@@ -4322,27 +4421,33 @@ class core_dml_testcase extends database_driver_testcase {
         $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
         $dbman->create_table($table);
 
-        $DB->insert_record($tablename, array('name'=>'lalala'));
+        $DB->insert_record($tablename, array('name'=>'LALALA'));
         $DB->insert_record($tablename, array('name'=>'holaaa'));
         $DB->insert_record($tablename, array('name'=>'aouch'));
 
+        // Regex /a$/i (case-insensitive).
         $sql = "SELECT * FROM {{$tablename}} WHERE name ".$DB->sql_regex()." ?";
         $params = array('a$');
-        if ($DB->sql_regex_supported()) {
-            $records = $DB->get_records_sql($sql, $params);
-            $this->assertCount(2, $records);
-        } else {
-            $this->assertTrue(true, 'Regexp operations not supported. Test skipped');
-        }
+        $records = $DB->get_records_sql($sql, $params);
+        $this->assertCount(2, $records);
 
+        // Regex ! (not) /.a/i (case insensitive).
         $sql = "SELECT * FROM {{$tablename}} WHERE name ".$DB->sql_regex(false)." ?";
         $params = array('.a');
-        if ($DB->sql_regex_supported()) {
-            $records = $DB->get_records_sql($sql, $params);
-            $this->assertCount(1, $records);
-        } else {
-            $this->assertTrue(true, 'Regexp operations not supported. Test skipped');
-        }
+        $records = $DB->get_records_sql($sql, $params);
+        $this->assertCount(1, $records);
+
+        // Regex /a$/ (case-sensitive).
+        $sql = "SELECT * FROM {{$tablename}} WHERE name ".$DB->sql_regex(true, true)." ?";
+        $params = array('a$');
+        $records = $DB->get_records_sql($sql, $params);
+        $this->assertCount(1, $records);
+
+        // Regex ! (not) /.a/ (case sensitive).
+        $sql = "SELECT * FROM {{$tablename}} WHERE name ".$DB->sql_regex(false, true)." ?";
+        $params = array('.a');
+        $records = $DB->get_records_sql($sql, $params);
+        $this->assertCount(2, $records);
 
     }
 
@@ -4539,18 +4644,54 @@ class core_dml_testcase extends database_driver_testcase {
         $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
         $table->add_field('name', XMLDB_TYPE_CHAR, '20', null, null);
         $table->add_field('intro', XMLDB_TYPE_TEXT, 'big', null, null);
+        // Add a CHAR field named using a word reserved for all the supported DB servers.
+        $table->add_field('where', XMLDB_TYPE_CHAR, '20', null, null, null, 'localhost');
+        // Add a TEXT field named using a word reserved for all the supported DB servers.
+        $table->add_field('from', XMLDB_TYPE_TEXT, 'big', null, null);
         $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
         $dbman->create_table($table);
 
-        $id1 = (string)$DB->insert_record($tablename, array('name' => null, 'intro' => null));
-        $id2 = (string)$DB->insert_record($tablename, array('name' => '', 'intro' => ''));
-        $id3 = (string)$DB->insert_record($tablename, array('name' => 'xxyy', 'intro' => 'vvzz'));
-        $id4 = (string)$DB->insert_record($tablename, array('name' => 'aa bb aa bb', 'intro' => 'cc dd cc aa'));
-        $id5 = (string)$DB->insert_record($tablename, array('name' => 'kkllll', 'intro' => 'kkllll'));
+        $fromfield = $dbman->generator->getEncQuoted('from');
+        $DB->execute("INSERT INTO {".$tablename."} (name,intro,$fromfield) VALUES (NULL,NULL,'localhost')");
+        $DB->execute("INSERT INTO {".$tablename."} (name,intro,$fromfield) VALUES ('','','localhost')");
+        $DB->execute("INSERT INTO {".$tablename."} (name,intro,$fromfield) VALUES ('xxyy','vvzz','localhost')");
+        $DB->execute("INSERT INTO {".$tablename."} (name,intro,$fromfield) VALUES ('aa bb aa bb','cc dd cc aa','localhost')");
+        $DB->execute("INSERT INTO {".$tablename."} (name,intro,$fromfield) VALUES ('kkllll','kkllll','localhost')");
 
         $expected = $DB->get_records($tablename, array(), 'id ASC');
+        $idx = 1;
+        $id1 = $id2 = $id3 = $id4 = $id5 = 0;
+        foreach (array_keys($expected) as $identifier) {
+            ${"id$idx"} = (string)$identifier;
+            $idx++;
+        }
 
         $columns = $DB->get_columns($tablename);
+
+        // Replace should work even with columns named using a reserved word.
+        $this->assertEquals('C', $columns['where']->meta_type);
+        $this->assertEquals('localhost', $expected[$id1]->where);
+        $this->assertEquals('localhost', $expected[$id2]->where);
+        $this->assertEquals('localhost', $expected[$id3]->where);
+        $this->assertEquals('localhost', $expected[$id4]->where);
+        $this->assertEquals('localhost', $expected[$id5]->where);
+        $DB->replace_all_text($tablename, $columns['where'], 'localhost', '::1');
+        $result = $DB->get_records($tablename, array(), 'id ASC');
+        $expected[$id1]->where = '::1';
+        $expected[$id2]->where = '::1';
+        $expected[$id3]->where = '::1';
+        $expected[$id4]->where = '::1';
+        $expected[$id5]->where = '::1';
+        $this->assertEquals($expected, $result);
+        $this->assertEquals('X', $columns['from']->meta_type);
+        $DB->replace_all_text($tablename, $columns['from'], 'localhost', '127.0.0.1');
+        $result = $DB->get_records($tablename, array(), 'id ASC');
+        $expected[$id1]->from = '127.0.0.1';
+        $expected[$id2]->from = '127.0.0.1';
+        $expected[$id3]->from = '127.0.0.1';
+        $expected[$id4]->from = '127.0.0.1';
+        $expected[$id5]->from = '127.0.0.1';
+        $this->assertEquals($expected, $result);
 
         $DB->replace_all_text($tablename, $columns['name'], 'aa', 'o');
         $result = $DB->get_records($tablename, array(), 'id ASC');
@@ -5509,6 +5650,42 @@ class core_dml_testcase extends database_driver_testcase {
             $dbman->drop_table($table);
         }
     }
+
+    /**
+     * Test that the database has full utf8 support (4 bytes).
+     */
+    public function test_four_byte_character_insertion() {
+        $DB = $this->tdb;
+
+        if ($DB->get_dbfamily() === 'mysql' && strpos($DB->get_dbcollation(), 'utf8_') === 0) {
+            $this->markTestSkipped($DB->get_name() .
+                    ' does not support 4 byte characters with only a utf8 collation.
+                    Please change to utf8mb4 for full utf8 support.');
+        }
+
+        $dbman = $this->tdb->get_manager();
+
+        $table = $this->get_test_table();
+        $tablename = $table->getName();
+
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('name', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+        $table->add_field('content', XMLDB_TYPE_TEXT, 'big', null, XMLDB_NOTNULL);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $dbman->create_table($table);
+
+        $data = array(
+            'name' => 'Name with a four byte character 𠮟る',
+            'content' => 'Content with a four byte emoji 📝 memo.'
+        );
+
+        $insertid = $DB->insert_record($tablename, $data);
+        $result = $DB->get_record($tablename, array('id' => $insertid));
+        $this->assertEquals($data['name'], $result->name);
+        $this->assertEquals($data['content'], $result->content);
+
+        $dbman->drop_table($table);
+    }
 }
 
 /**
@@ -5535,7 +5712,9 @@ class moodle_database_for_testing extends moodle_database {
     public function get_last_error() {}
     public function get_tables($usecache=true) {}
     public function get_indexes($table) {}
-    public function get_columns($table, $usecache=true) {}
+    protected function fetch_columns(string $table): array {
+        return [];
+    }
     protected function normalise_value($column, $value) {}
     public function set_debug($state) {}
     public function get_debug() {}
